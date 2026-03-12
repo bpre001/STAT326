@@ -1,0 +1,348 @@
+---
+title: "STATS 326/786"
+author: "Dates, Periods, Durations and Intervals with lubridate"
+date: \today
+fontsize: 11pt
+output:
+  bookdown::html_document2:
+    fig_height: 5
+    toc: yes
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(lubridate)
+library(tidyverse)
+```
+
+# Overview
+
+This walkthrough introduces the `lubridate` package for working with dates and times in R.  We cover four core topics:
+
+1. **Date and datetime creation** — parsing strings, constructing from components, and time zones.
+2. **Periods** — human-friendly time spans (e.g., "1 month", "3 years").
+3. **Durations** — exact physical time spans in seconds.
+4. **Intervals** — a specific span anchored between two instants.
+
+---
+
+# 1 Date and Datetime Creation
+
+## 1.1 Parsing strings
+
+`lubridate` provides a family of `ymd()`, `dmy()`, `mdy()` (and datetime variants) that parse strings flexibly.
+
+```{r parse-strings}
+# Year-month-day
+ymd("2024-03-14")
+ymd("20240314")       # No separators also works
+
+# Day-month-year
+dmy("14/03/2024")
+dmy("14 March 2024")
+
+# Month-day-year (US format)
+mdy("March 14, 2024")
+mdy("03-14-2024")
+```
+
+## 1.2 Adding a time component
+
+Append `_hms`, `_hm`, or `_h` to include a time.
+
+```{r parse-datetimes}
+# UTC by default
+dt_utc <- ymd_hms("2024-03-14 09:30:00")
+dt_utc
+
+# Specify a time zone
+dt_nz <- ymd_hms("2024-03-14 09:30:00", tz = "Pacific/Auckland")
+dt_nz
+
+# Converting between time zones (same instant, different representation)
+with_tz(dt_nz, tzone = "UTC")
+```
+
+## 1.3 Constructing from components
+
+`make_date()` and `make_datetime()` build a date/datetime from individual numeric parts.
+
+```{r make-date}
+# Build a date
+make_date(year = 2024, month = 3, day = 14)
+
+# Build a datetime with time zone
+make_datetime(year  = 2024,
+              month = 3,
+              day   = 14,
+              hour  = 9,
+              min   = 30,
+              sec   = 0,
+              tz    = "Pacific/Auckland")
+```
+
+## 1.4 Extracting components
+
+Once you have a date or datetime object, accessor functions let you pull out individual parts.
+
+```{r accessors}
+d <- ymd_hms("2024-07-04 18:45:30", tz = "US/Eastern")
+
+year(d)
+month(d)
+month(d, label = TRUE)   # Abbreviated month name
+day(d)
+wday(d, label = TRUE)    # Day of the week
+hour(d)
+minute(d)
+second(d)
+tz(d)                    # Time zone
+```
+
+You can also *set* components by assigning into these functions:
+
+```{r set-components}
+d2 <- d
+year(d2) <- 2025
+d2
+```
+
+## 1.5 Today and now
+
+```{r today-now}
+today()          # Current date (no time)
+now()            # Current datetime (system time zone)
+now("UTC")       # Current datetime in UTC
+```
+
+---
+
+# 2 Periods
+
+A **period** is a human-calendar time span.  It is specified in "clock" units — years, months, days, hours, minutes, seconds — as a person would describe them.  Adding a period of `months(1)` to 31 January gives 28 February (the end of the next month), respecting calendar irregularities like leap years and varying month lengths.
+
+## 2.1 Creating periods
+
+```{r create-periods}
+years(1)
+months(6)
+weeks(2)
+days(10)
+hours(3)
+minutes(30)
+seconds(45)
+
+# Combine with +
+years(1) + months(6) + days(10)
+```
+
+## 2.2 Arithmetic with periods
+
+```{r period-arithmetic}
+start <- ymd("2024-01-31")
+
+# Adding one month: period respects calendar
+start + months(1)   # 2024-02-29 (2024 is a leap year)
+
+# Compare with non-leap year
+ymd("2023-01-31") + months(1)   # 2023-02-28
+
+# Adding years across a leap year boundary
+ymd("2024-02-29") + years(1)    # 2025-02-29 does not exist -> NA
+ymd("2024-02-29") + years(4)    # 2028-02-29 exists -> valid
+
+# Arithmetic on datetimes
+dt <- ymd_hms("2024-03-10 02:00:00", tz = "US/Eastern")
+dt + hours(3)
+dt + days(1) + hours(3)
+```
+
+## 2.3 Periods and DST
+
+Because periods follow the clock, they can cross Daylight Saving Time (DST) transitions naturally.
+
+```{r periods-dst}
+# US/Eastern clocks spring forward 2024-03-10 02:00 -> 03:00
+before_dst <- ymd_hms("2024-03-10 01:00:00", tz = "US/Eastern")
+before_dst + hours(2)   # Period: 03:00 (clock jumps, only 1 real hour passes)
+```
+
+---
+
+# 3 Durations
+
+A **duration** is an exact physical time span measured in seconds.  Unlike periods, durations do not account for calendar irregularities.  Adding `dyears(1)` always adds exactly 31,557,600 seconds (365.25 × 24 × 60 × 60), regardless of whether it crosses a leap year or a DST change.
+
+## 3.1 Creating durations
+
+Duration constructors are prefixed with `d`:
+
+```{r create-durations}
+dyears(1)        # 31,557,600 seconds
+dmonths(1)       # 2,629,800 seconds (1/12 of a year)
+dweeks(1)        # 604,800 seconds
+ddays(1)         # 86,400 seconds
+dhours(1)        # 3,600 seconds
+dminutes(1)      # 60 seconds
+dseconds(1)      # 1 second
+
+# Convert a difftime directly to a duration
+as.duration(difftime(ymd("2024-12-31"), ymd("2024-01-01")))
+```
+
+## 3.2 Arithmetic with durations
+
+```{r duration-arithmetic}
+start <- ymd("2024-01-31")
+
+# Exact seconds added — result may differ from period arithmetic
+start + dmonths(1)   # Not necessarily end of February
+
+# Duration in years from Einstein's lifespan
+birth <- make_date(1879, 3, 14)
+death <- make_date(1955, 4, 18)
+
+(death - birth)            # difftime in days
+(death - birth) / ddays(1) # Number of days as a plain number
+(death - birth) / dyears(1) # Convert to years
+```
+
+## 3.3 Periods vs Durations — side-by-side comparison
+
+```{r compare}
+ref <- ymd_hms("2024-03-09 12:00:00", tz = "US/Eastern")  # Day before DST
+
+# Period: follows the clock
+ref + days(1)
+
+# Duration: adds exactly 86,400 seconds (loses an hour due to DST spring-forward)
+ref + ddays(1)
+```
+
+> **Rule of thumb:**  Use *periods* when you want human-readable calendar arithmetic (e.g., "add 1 month").  Use *durations* when you need exact elapsed time in seconds (e.g., computing flight transit time).
+
+---
+
+# 4 Intervals
+
+An **interval** is a time span anchored between a specific *start* and *end* instant.  Unlike periods or durations, an interval carries its position in time, which allows exact calendar- and DST-aware calculations.
+
+## 4.1 Creating intervals
+
+```{r create-intervals}
+start <- ymd_hms("2024-03-14 09:00:00", tz = "Pacific/Auckland")
+end   <- ymd_hms("2024-03-16 17:30:00", tz = "Pacific/Auckland")
+
+int <- interval(start, end)
+int
+
+# Shorthand using %--% operator
+int2 <- start %--% end
+int2
+
+# Check they are the same
+identical(int, int2)
+```
+
+## 4.2 Interval length
+
+Convert an interval to a duration or period to get its length:
+
+```{r interval-length}
+# As a duration (in seconds by default)
+as.duration(int)
+
+# In convenient units
+int / dminutes(1)   # Minutes
+int / dhours(1)     # Hours
+int / ddays(1)      # Days
+
+# As a period (calendar-aware)
+as.period(int)
+```
+
+## 4.3 Time-zone-aware intervals
+
+```{r tz-interval}
+# Flight: Auckland to Paris
+depart <- make_datetime(2022, 11, 18, 15, 15, tz = "Pacific/Auckland")
+arrive <- make_datetime(2022, 11, 19, 12, 20, tz = "Europe/Paris")
+
+flight_int <- interval(depart, arrive)
+flight_int
+
+# Duration in minutes
+flight_int / dminutes(1)
+
+# Duration in hours
+flight_int / dhours(1)
+```
+
+## 4.4 Testing membership with `%within%`
+
+```{r within}
+event <- ymd_hms("2024-03-15 12:00:00", tz = "Pacific/Auckland")
+
+event %within% int   # Is this instant inside the interval?
+
+# A vector of dates
+dates <- ymd(c("2024-03-13", "2024-03-14", "2024-03-15", "2024-03-17"))
+dates %within% int
+```
+
+## 4.5 Overlapping and adjacent intervals
+
+```{r overlap}
+int_a <- interval(ymd("2024-01-01"), ymd("2024-06-30"))
+int_b <- interval(ymd("2024-04-01"), ymd("2024-12-31"))
+int_c <- interval(ymd("2024-07-01"), ymd("2024-12-31"))
+
+int_overlaps(int_a, int_b)   # TRUE — they share April–June
+int_overlaps(int_a, int_c)   # FALSE — they share no days (touch at boundary)
+```
+
+---
+
+# 5 Summary Table
+
+| Concept | Constructor example | Key property |
+|---|---|---|
+| Date | `ymd("2024-03-14")` | Calendar date, no time |
+| Datetime | `ymd_hms("2024-03-14 09:00:00", tz = "UTC")` | Instant in time |
+| Period | `months(1) + days(3)` | Calendar units, follows clock |
+| Duration | `dmonths(1) + ddays(3)` | Exact seconds, physical time |
+| Interval | `interval(start, end)` | Anchored span between two instants |
+
+---
+
+# 6 Quick Reference
+
+```{r quick-reference, eval=FALSE}
+# Parsing
+ymd(); dmy(); mdy()             # Date only
+ymd_hms(); dmy_hm()             # Date + time
+make_date(); make_datetime()     # From numeric components
+
+# Accessors
+year(); month(); day()
+hour(); minute(); second()
+wday(); yday(); week()
+tz(); with_tz(); force_tz()
+
+# Periods (calendar)
+years(); months(); weeks(); days(); hours(); minutes(); seconds()
+
+# Durations (exact seconds)
+dyears(); dmonths(); dweeks(); ddays(); dhours(); dminutes(); dseconds()
+
+# Intervals
+interval(start, end)  or  start %--% end
+int_overlaps(); %within%
+as.duration(); as.period()
+```

@@ -1,0 +1,155 @@
+---
+title: "STATS 326/786"
+author: "Week 2 Tutorial"
+date: \today
+fontsize: 11pt
+output:
+  bookdown::html_document2:
+    fig_height: 5
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(lubridate)
+library(tidyverse)
+```
+
+# Problem 1
+
+> Albert Einstein was born on 14 March 1879 and died on 18 April 1955.  Use `lubridate` functions to calculate how many days he was alive for.  Then calculate this as a "duration" in years.  You may ignore time-zones for this question.
+
+Solution:
+
+```{r}
+birth <- make_date(year = 1879,
+                   month = 3,
+                   day = 14)
+
+death <- make_date(year = 1955,
+                   month = 4,
+                   day = 18)
+
+# Number of days (period)
+death - birth
+
+# Years (duration)
+(death - birth) / dyears(1)
+```
+
+
+# Problem 2
+
+> Matt went to a conference in Toulouse in 2022.  He departed Auckland at 1515 on 18 November 2022, and landed in Toulouse, France at 1220 on 19 November.  Use `lubridate` functions to create a time interval object from departure to landing.  Then compute the duration (in minutes) he was in transit for.  Be careful with time-zones.
+
+Solution:
+
+```{r}
+depart <- make_datetime(year = 2022,
+                        month = 11,
+                        day = 18,
+                        hour = 15,
+                        min = 15,
+                        tz = "Pacific/Auckland")
+
+arrive <- make_datetime(year = 2022,
+                        month = 11,
+                        day = 19,
+                        hour = 12,
+                        min = 20,
+                        tz = "Europe/Paris")
+
+int <- lubridate::interval(depart, arrive)  # Note: Use lubridate, not tsibble interval
+int                                         # Time interval
+int / dminutes(1)                           # Number of minutes (duration)
+
+```
+
+# Problem 3
+
+> The `flights` data set in the `nycflights13` package contains information on all flights from New York in 2013.  Install and load this `R` package and type `?flights` to look at the help file to see variable details.  Consider all flights from JFK (US/Eastern time-zone) to LAX (US/Pacific time-zone).  
+
+```{r}
+library(nycflights13)
+
+# ?flights  # Look at help file to see variable details
+
+data = flights %>%
+  filter(origin == "JFK",
+         dest == "LAX",
+         !is.na(arr_time)) 
+```
+
+## (a) 
+
+> Create a departure date-time variable by considering the scheduled departure time and departure delay.  Note that `time_hour` is the date-time variable for the scheduled departure time.  
+
+```{r}
+data = data %>%
+  mutate(dep_datetime = time_hour + minutes(dep_delay))
+```
+
+
+## (b)
+
+> Create an arrival date-time variable by considering the actual arrival time, the date of departure, and whether a flight arrives on the same day or the following day (overnight flights). 
+Hint: Convert `arr_time` into a character variable of length 4 using `sprintf`.  Then extract the hour and minutes using `substr` when creating your arrival date-time variable.  Then create an indicator to determine which flights are overnight (1) or not (0) and add this to your arrival date-time.  
+
+```{r}
+# Date-time assumes same day as scheduled departure
+data = data %>%
+  mutate(arr_time_char = sprintf("%04d", arr_time),  
+         arr_datetime = make_datetime(year, month, day, 
+                                      as.numeric(substr(arr_time_char, 1, 2)), 
+                                      as.numeric(substr(arr_time_char, 3, 4)),
+                                      tz = "US/Pacific"))  
+# Some notes:
+# sprintf: Creates string with four digits and 0 pads shorter strings to the left
+#          e.g., 56 becomes "0056".
+# substr(x, a, b): Looks at a string and takes from a to b of that string.
+# as.numeric: Coerces string to numeric variable as required for make_datetime
+
+# Now adjust the day to account for overnight flights and long arrival delays
+data = data %>%
+  mutate(overnight = arr_datetime < dep_datetime) %>%   # Is it an overnight flight?
+  mutate(arr_datetime = arr_datetime + days(overnight)) # Add 0 or 1 days to arrival date-time
+
+```
+
+
+## (c)
+
+> We are told that the average transit time is 6.5 hours.  Create a variable to calculate the transit time, i.e., the difference between the arrival date-time and departure date-time.  Plot the distribution and comment. Then plot the transit time against the air time and comment.  
+
+```{r, message = FALSE, warning = FALSE}
+data = data %>%
+  mutate(transit_time = arr_datetime - dep_datetime)
+
+ggplot(data = data, 
+       mapping = aes(x = transit_time)) +
+  geom_histogram(fill = "blue", col = "white") + 
+  geom_vline(xintercept = 6.5, linewidth = 1, linetype = "dashed") + 
+  theme_bw() +
+  labs(x = "Transit time (hours)",
+       y = "Count")
+
+ggplot(data = data,
+       mapping = aes(x = transit_time,
+                     y = air_time / 60)) + 
+  geom_point(alpha = 0.1, col = "blue", size = 0.5) + 
+  geom_abline(slope = 1, intercept = 0) + 
+  theme_bw() + 
+  labs(x = "Transit time (hours)",
+       y = "Air time (hours)") 
+
+```
+
+The average transit time from JFK to LAX does appear to be around 6.5 hours, or perhaps a little lower.  The transit time is always longer than the air time due to processing (arrival time is the time the flight arrives at the gate, not the time it lands).  
+
+
