@@ -1,0 +1,220 @@
+---
+title: "STATS 326/786"
+author: "Week 4 Tutorial"
+date: \today
+fontsize: 11pt
+output:
+  bookdown::html_document2:
+    fig_height: 5
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(fpp3)
+```
+
+
+# Problem 1
+
+> Below is some fake seasonal data with a perfectly periodic pattern, no trend-cycle, and no remainder components.  In class, we learned that moving averages (MA) are useful for smoothing time series and estimating a trend-cycle. A $2 \times 4~\text{MA}$ and a $5~\text{MA}$ have been overlaid on the original time series.  What do you notice about the MAs, and why might this be happening?  
+
+```{r, warning = FALSE, echo = FALSE}
+
+data <- tsibble(Quarter = yearquarter(1:40),
+                Data = rep(c(4, 9, 3, 7), 10),
+                index = Quarter)
+
+data.ma <- data %>%
+  mutate(`4-MA` = slider::slide_dbl(Data, 
+                                    mean, 
+                                    .before = 1, 
+                                    .after = 2, 
+                                    .complete = TRUE),
+         `2x4-MA` = slider::slide_dbl(`4-MA`, 
+                                      mean, 
+                                      .before = 1, 
+                                      .after = 0, 
+                                      .complete = TRUE),
+         `5-MA` = slider::slide_dbl(Data, 
+                                    mean, 
+                                    .before = 2,
+                                    .after = 2, 
+                                    .complete = TRUE))
+
+data.long = data.ma %>%
+  pivot_longer(cols = c('Data', "2x4-MA", "5-MA"),
+               names_to = "Series", values_to = "Measurement")
+
+ggplot(data = data.long) + 
+  geom_line(mapping = aes(x = Quarter, y = Measurement, col = Series)) + 
+  theme_bw()
+  
+```
+
+> Repeat the above exercise, but for the fake data below.  This data is seasonal (again, with a perfectly periodic pattern) with a linear trend and no remainder component.  
+
+```{r, warning=FALSE, echo = FALSE}
+
+data <- tsibble(Quarter = yearquarter(1:40),
+                y = rep(c(4, 9, 3, 7), 10) + 0.5 * 1:40,
+                index = Quarter)
+
+
+data %>% 
+  autoplot(y, colour = "grey") + 
+  theme_minimal()
+
+```
+
+```{r}
+
+data_ma <- data |> 
+  mutate(`4-MA`= slider::slide_dbl(y,
+                                   mean,
+                                   .before = 1,
+                                   .after = 2,
+                                   .complete = TRUE),
+         `2x4-MA`= slider::slide_dbl(`4-MA`,
+                                      mean,
+                                      .before = 1,
+                                      .after = 0,
+                                      .complete = TRUE),
+         `5-MA`= slider::slide_dbl(y, 
+                                    mean,
+                                    .before = 2,
+                                    .after = 2,
+                                    .complete = TRUE)
+         )
+  
+data_ma |> 
+  autoplot(y, colour = "grey") +
+  autolayer(data_ma, `2x4-MA`, col = 2) +
+  autolayer(data_ma, `5-MA`, col = 4)+
+  theme_minimal()
+
+
+```
+
+
+
+> If you were to apply a $3 \times 5~\text{MA}$ to a time series, analytically derive the weights that each observation contributes to the moving-averaged time series at time $t$. 
+
+
+
+
+
+# Problem 2
+
+> Below is an example of a time series with multiplicative seasonality.  In this problem, you learn how to perform your own (multiplicative) classical decomposition from first principles.  
+
+```{r, echo = FALSE}
+a10 <- PBS %>%
+  filter(ATC2 == "A10") %>%
+  select(Month, Concession, Type, Cost) %>%
+  summarise(Total_Cost = sum(Cost)) %>%
+  mutate(Total_Cost = Total_Cost / 1e6,
+         Month.Name = month(Month, label = TRUE)) 
+
+a10 %>%
+  autoplot(Total_Cost) + 
+  theme_minimal()
+```
+
+> Calculate the trend-cycle by performing a $2\times 12~\text{MA}$ on your time series.
+
+```{r}
+
+a10 <- a10 |> 
+  mutate(`12-MA`= slider::slide_dbl(Total_Cost,
+                                    mean,
+                                    .before = 5,
+                                    .after = 6,
+                                    .complete = TRUE),
+         Trend = slider::slide_dbl(`12-MA`,
+                                      mean,
+                                      .before = 1,
+                                      .after = 0,
+                                      .complete = TRUE)
+         )
+
+
+a10 |> autoplot(Total_Cost) +
+  autolayer(a10, Trend, col = 4)
+
+
+```
+         
+> Compute the detrended time series (original time series divided by trend).    
+         
+```{r}         
+
+a10 <- a10 |> 
+  mutate(Detrended = Total_Cost / Trend)
+
+a10 |> autoplot(Total_Cost) +
+  autolayer(a10, Trend, col = 2) +
+  autolayer(a10, Detrended, col = 4)
+
+
+glimpse(a10)
+
+
+```
+
+> Calculate the seasonal factor for each month (noting that these must sum to 12 for a monthly time series).  
+
+```{r}
+
+a10_s <- a10 |> 
+  index_by(Month.Name) |> 
+  summarise(Seasonal = mean(Detrended, na.rm = TRUE)) |> 
+  glimpse()
+
+seasonal <- a10_s |> pull(Seasonal) |> print()
+
+seasonal |> prod()
+
+sum_s
+
+# small adjustment to seasonal factors so that they sum to 12
+# 
+a10_s <- a10_s |> 
+  mutate(Seasonal = Seasonal / sum_s * 12) |> 
+  print()
+
+prod(a10_s$Seasonal)
+
+glimpse(a10_s)
+
+```
+
+> Merge your data sets so the seasonal factor is now included in your original tsibble.
+
+```{r}
+
+```
+
+> Compute the remainder component (as detrended divided by seasonal) and seasonally-adjusted component (as original time series divided by seasonal).
+
+```{r}
+
+```
+
+> Plot the original time series and overlay it with the trend-cycle and seasonally-adjusted series.  
+
+```{r, warning = FALSE}
+
+```
+
+> Extra: See if you can re-create the classical decomposition plot.
+
+```{r, warning = FALSE}
+
+```

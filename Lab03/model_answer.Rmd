@@ -1,0 +1,301 @@
+---
+title: "STATS 326/786 — Lab 03 Model Answer"
+author: "Week 3 Tutorial"
+date: \today
+output:
+  bookdown::html_document2:
+    fig_height: 5
+    toc: yes
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(tidyverse)
+library(fpp3)
+```
+
+---
+
+# Problem 1 — Australian Retail Turnover
+
+## Setup — Selecting a Time Series
+
+We filter to a single series: **Queensland — Takeaway food services**.  Any valid
+series is acceptable; the commentary below is specific to this choice.
+
+```{r}
+d <- aus_retail %>%
+  filter(State    == "Queensland",
+         Industry == "Takeaway food services")
+```
+
+## Part 1 — Time Plot
+
+> Select one time series, plot it, and comment on what you observe.
+
+### Solution
+
+```{r}
+d %>%
+  autoplot(Turnover) +
+  labs(title = "Queensland: Takeaway Food Services",
+       y = "Turnover ($M AUD)", x = NULL) +
+  theme_minimal()
+```
+
+### Explanation
+
+| Feature | Observation |
+|---|---|
+| **Trend** | Strong positive trend; approximately linear but with slight acceleration post-2000 |
+| **Seasonality** | Regular annual peaks and troughs — appears **multiplicative** because the amplitude grows with the level |
+| **Cycles** | Possible business-cycle fluctuation of ~5–8 years, more visible from 1995 onward |
+| **Outliers / structural breaks** | No obvious single outliers; a visible dip around 2020 (COVID-19 impact) |
+
+**Additive vs multiplicative seasonality:** When the size of seasonal swings grows
+proportionally with the level of the series, the seasonality is **multiplicative**.
+This matters for choosing an appropriate decomposition method (e.g., multiplicative
+STL or log-transformation before fitting an additive model).
+
+---
+
+## Part 2 — Seasonal & Subseries Plots
+
+> Create a seasonal plot and a seasonal subseries plot.  Comment on any interesting
+> patterns.
+
+### Solution
+
+```{r}
+d %>% gg_season(Turnover)
+d %>% gg_subseries(Turnover)
+```
+
+### Explanation
+
+**Seasonal plot (`gg_season`):**
+
+* Each coloured line is one year.
+* The peak occurs in **December–January** (Australian summer holiday period), and
+  the trough in **February**.
+* The year-on-year increase is visible — later years (lighter colours) sit above
+  earlier years throughout.
+
+**Subseries plot (`gg_subseries`):**
+
+* Each panel shows one calendar month across all years; the blue horizontal line
+  is the monthly mean.
+* Confirms that December and January have the highest average turnover; February
+  the lowest.
+* The upward slope within every panel shows the year-on-year growth trend is
+  consistent across all months.
+
+**Why is February low?** Partly because February has fewer days — this motivates
+the calendar adjustment in the next part.
+
+---
+
+## Part 3 — Calendar Adjustment
+
+> Make a calendar adjustment and re-plot the seasonal plots.  Discuss whether there
+> is a calendar effect.
+
+### Solution
+
+```{r}
+d <- d %>%
+  mutate(Days            = days_in_month(Month),
+         Turnover_Per_Day = Turnover / Days)
+
+d %>% gg_season(Turnover_Per_Day)
+d %>% gg_subseries(Turnover_Per_Day)
+```
+
+### Explanation
+
+| Variable | Meaning |
+|---|---|
+| `days_in_month(Month)` | Number of days in each month (28/29/30/31) |
+| `Turnover / Days` | Average daily turnover — removes the "more days = more sales" effect |
+
+**Is there a calendar effect?**  Yes.
+
+* In the subseries plot, February's mean **rises** relative to March once we
+  divide by days, closing most of the gap with the surrounding months.
+* April, September, and November (30-day months) also shift slightly upward
+  relative to the 31-day months.
+* This confirms that part of February's apparent low turnover was simply due to
+  it having fewer days, not genuinely lower daily trading activity.
+
+---
+
+## Part 4 — Box-Cox Transformation
+
+> Perform a Box-Cox transformation on the calendar-adjusted series.  What is the
+> optimal $\lambda$?
+
+### Solution
+
+```{r}
+lambda <- d %>%
+  features(Turnover_Per_Day, features = guerrero) %>%
+  pull(lambda_guerrero)
+lambda
+
+d %>%
+  autoplot(box_cox(Turnover_Per_Day, lambda)) +
+  labs(title    = sprintf("Box-Cox transformed turnover (λ = %.4f)", lambda),
+       y = "Transformed Turnover Per Day", x = NULL) +
+  theme_minimal()
+```
+
+### Explanation
+
+**Box-Cox family:**
+
+$$
+w_t = \begin{cases}
+  \log(y_t) & \lambda = 0 \\
+  \dfrac{y_t^{\lambda} - 1}{\lambda} & \lambda \neq 0
+\end{cases}
+$$
+
+* The **Guerrero method** selects $\lambda$ to minimise the coefficient of
+  variation of the subseries means — i.e., it looks for the $\lambda$ that makes
+  the seasonal variation most stable across the level of the series.
+* For this Queensland takeaway series the optimal $\lambda \approx 0.29$, which
+  is close to (but not exactly) a log transform ($\lambda = 0$).
+* The transformed series shows more stable variance across time, which is the
+  goal: multiplicative seasonality becomes approximately additive after
+  transformation.
+
+**Practical tip:** Values of $\lambda$ close to 0 are often rounded to 0 (log)
+for interpretability.  Here, $\lambda \approx 0.29$ is close enough that a log
+transform would also be reasonable.
+
+---
+
+# Problem 2 — White Noise
+
+## Setup
+
+```{r}
+set.seed(12345)
+year <- 1900:2024
+T    <- length(year)
+data <- tsibble(year = year,
+                y    = rnorm(T),
+                index = year)
+```
+
+> **Note:** The solutions file adds `set.seed(12345)` so that results are
+> reproducible.  The student version omits this, so individual plots will differ —
+> but the *qualitative* conclusions should be the same.
+
+---
+
+## Part 1 — Time Plot
+
+> Plot a time plot and comment on any features you observe.
+
+### Solution
+
+```{r}
+data %>%
+  autoplot(y) +
+  labs(title = "White Noise Time Series (mean = 0, sd = 1)",
+       y = "y", x = "Year") +
+  theme_minimal()
+```
+
+### Explanation
+
+| Feature | Observation |
+|---|---|
+| **Trend** | None — the series fluctuates around zero with no systematic direction |
+| **Seasonality** | None — the data are annual so intra-year seasonality cannot exist |
+| **Cycles** | None apparent |
+| **Variance** | Roughly constant (homoscedastic) |
+| **Range** | Approximately $[-2.5, 2.5]$, consistent with a standard Normal |
+
+This is expected: the series was generated as i.i.d. $\mathcal{N}(0,1)$, so by
+construction there is no temporal structure.
+
+---
+
+## Part 2 — ACF Plot with Custom Significance Lines
+
+> Plot the ACF, adding 90% significance lines in red.
+> Hint: if `qnorm(0.975) = 1.96`, what is the new multiplier?
+
+### Solution
+
+```{r}
+data %>%
+  ACF(y) %>%
+  autoplot() +
+  geom_hline(yintercept = c(-1, 1) * qnorm(0.95) / sqrt(T),
+             colour = "red", linetype = "dashed") +
+  labs(title = "ACF of White Noise — blue = 95%, red = 90% significance") +
+  theme_minimal()
+```
+
+### Explanation
+
+**Where do the significance lines come from?**
+
+Under the null hypothesis that all autocorrelations are zero, each sample
+autocorrelation $\hat{\rho}_k$ is approximately $\mathcal{N}(0, 1/T)$ for large
+$T$.  A two-sided $100(1-\alpha)\%$ significance band is therefore:
+
+$$
+\pm \frac{z_{1-\alpha/2}}{\sqrt{T}}
+$$
+
+| Level | $\alpha$ | $z_{1-\alpha/2}$ | R expression |
+|---|---|---|---|
+| 95% (default blue) | 0.05 | `qnorm(0.975)` $\approx 1.96$ | `1.96 / sqrt(T)` |
+| 90% (red) | 0.10 | `qnorm(0.95)` $\approx 1.645$ | `qnorm(0.95) / sqrt(T)` |
+
+**What to expect:** For a white noise series of length $T = 125$, we expect
+approximately 5% of the 95%-level bars to exceed the blue lines by chance alone,
+and 10% to exceed the narrower red lines.
+
+---
+
+## Part 3 — Lag Plot
+
+> Produce a lag plot.  Comment on why there is no colour.  Comment on any patterns.
+
+### Solution
+
+```{r}
+data %>%
+  gg_lag(y, geom = "point", alpha = 0.5) +
+  labs(title = "Lag plot of White Noise") +
+  theme_minimal()
+```
+
+### Explanation
+
+**Why no colour?**
+
+In `fpp3`, `gg_lag()` colours points by the **season** of the observation (e.g.,
+month or quarter).  This series has an **annual** index — there is only one
+observation per year and no sub-annual seasonality — so every observation belongs
+to the same "season" and a single colour is used throughout.
+
+**What patterns do we observe?**
+
+* There is **no discernible linear relationship** between $y_t$ and $y_{t-k}$ at
+  any of the displayed lags.
+* The point clouds are roughly circular (or formless), indicating near-zero
+  autocorrelation at every lag.
+* This is exactly what we expect from a white noise process: successive values are
+  independent, so knowing $y_{t-k}$ tells us nothing about $y_t$.

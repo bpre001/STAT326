@@ -1,0 +1,145 @@
+---
+title: "STATS 326/786"
+author: "Week 3 Tutorial"
+date: \today
+fontsize: 11pt
+output:
+  bookdown::html_document2:
+    fig_height: 5
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(fpp3)
+```
+
+# Problem 1
+
+> Explore the `aus_retail` data set in the `tsibbledata` package.  Below is a list of the Australian states and industries in this data set.
+
+```{r, echo = FALSE, include = FALSE}
+unique(aus_retail$State)
+unique(aus_retail$Industry)
+```
+
+> Select one time series, plot it, and comment on what you observe.  Things to discuss include trend (linear or nonlinear, positive or negative), seasonality (additive or multiplicative), cycles, outliers, structural breaks, etc.  
+
+```{r}
+
+data <- aus_retail |> 
+  filter(State == "Tasmania",
+         Industry == "Cafes, restaurants and takeaway food services")
+
+data |>
+  autoplot(Turnover)
+
+```
+
+
+> Create a seasonal plot and a seasonal subseries of your selected time series.  Comment on any interesting patterns you observe.
+
+```{r}
+
+data |> 
+  gg_season(Turnover) +
+  labs(title = "Seasonal plot of Turnover")
+
+data |>
+  gg_subseries(Turnover) +
+  labs(title = "Seasonal subseries plot of Turnover")
+
+```
+
+
+> Make a calander adjustment to your time series and re-plot the seasonal plots.  Discuss whether there is a calendar effect for your original time series.  
+
+```{r}
+
+glimpse(data)
+
+data <- data |> 
+  mutate(Days = days_in_month(Month),
+         TurnoverPerDay = Turnover / Days)
+
+data |>
+  gg_season(TurnoverPerDay) +
+  labs(title = "Seasonal plot of Turnover per Day")
+
+data |>
+  gg_subseries(TurnoverPerDay) +
+  labs(title = "Seasonal subseries plot of Turnover per Day")
+
+
+```
+
+
+> Perform a Box-Cox transformation to your calendar-adjusted time series and plot your transformed data.  What is the optimal value for $\lambda$ for your particular series? 
+
+```{r}
+
+lambda <- data |> 
+  features(TurnoverPerDay, features = guerrero) |> 
+  pull(lambda_guerrero) 
+
+lambda
+
+data |> 
+  autoplot(box_cox(TurnoverPerDay,lambda)) +
+  autolayer(data,log(TurnoverPerDay), col = 2) +
+  labs(title = "Transformed data")
+
+```
+
+
+
+# Problem 2
+
+> Below we create a `tsibble` object for a white noise time series with mean 0 and standard deviation 1.  
+
+```{r}
+
+set.seed(12345)
+year <- 1900:2024
+N <- length(year)
+y <- rnorm(N)
+data <- tsibble(year = year,
+                y = y,
+                index = year)
+```
+
+> Plot a time plot of the data.  Comment on any features you observe.
+
+```{r}
+
+data |> 
+  autoplot(y) +
+  labs(title = "Time plot of white noise series")
+
+```
+
+
+> The dashed blue horizontal lines in the `ACF` plot represent the 95\% significance level for the autocorrelation coefficients.   This is given by $\pm 1.96 / \sqrt{T}$, where $T$ is the length of the time series. Plot the `ACF` plot, adding on your own 90\% significance lines in red.  
+Hint: If `qnorm(0.975) = 1.96`, what will your new multiplier be?
+
+```{r}
+
+data |> 
+  ACF(y) |> 
+  autoplot() +
+  labs(title = "ACF plot of white noise series")
+
+```
+
+> Produce a lag plot for your data.  Comment on why there is no colour in your plot.  Comment on the any patterns you observe.  
+
+```{r}
+
+```
+

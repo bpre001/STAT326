@@ -1,0 +1,69 @@
+---
+title: "STATS 326/786 — Lab 02 Q3(a) Model Answer"
+author: "Week 2 Tutorial"
+date: \today
+output:
+  bookdown::html_document2:
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(lubridate)
+library(tidyverse)
+library(nycflights13)
+```
+
+# Problem 3 — Setup
+
+Filter the `flights` dataset to all JFK → LAX flights with a recorded arrival time.
+
+```{r}
+data <- flights %>%
+  filter(origin == "JFK",
+         dest   == "LAX",
+         !is.na(arr_time))
+```
+
+# Problem 3(a)
+
+> Create a departure date-time variable by considering the scheduled departure time and departure delay.  Note that `time_hour` is the date-time variable for the scheduled departure time.
+
+## Solution
+
+```{r}
+data <- data %>%
+  mutate(dep_datetime = time_hour + minutes(dep_delay))
+```
+
+## Explanation
+
+| Component | Role |
+|---|---|
+| `time_hour` | A `POSIXct` date-time giving the **scheduled** departure hour (e.g., `2013-01-01 05:00:00 EST`) |
+| `dep_delay` | Departure delay in **minutes** (negative = early departure) |
+| `minutes(dep_delay)` | A `lubridate` period object converting the integer delay into minutes |
+| `time_hour + minutes(dep_delay)` | Adds the delay to the scheduled time to give the **actual** departure date-time |
+
+**Why `minutes()` and not just `+ dep_delay`?**
+
+Adding a plain integer to a `POSIXct` object adds **seconds**, not minutes.
+`lubridate::minutes()` creates a period of the correct unit, making the arithmetic unambiguous and self-documenting.
+
+**Note on time zones:** `time_hour` in `nycflights13` is already in `US/Eastern`
+(JFK's local time zone), so no explicit `tz` conversion is needed for the
+departure datetime.
+
+## Quick check
+
+```{r}
+data %>%
+  select(time_hour, dep_delay, dep_datetime) %>%
+  head(5)
+```

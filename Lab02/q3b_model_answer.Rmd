@@ -1,0 +1,112 @@
+---
+title: "STATS 326/786 — Lab 02 Q3(b) Model Answer"
+author: "Week 2 Tutorial"
+date: \today
+output:
+  bookdown::html_document2:
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(lubridate)
+library(tidyverse)
+library(nycflights13)
+```
+
+# Problem 3 — Setup
+
+Filter the `flights` dataset to all JFK → LAX flights with a recorded arrival time,
+and recreate the departure date-time from Q3(a).
+
+```{r}
+data <- flights %>%
+  filter(origin == "JFK",
+         dest   == "LAX",
+         !is.na(arr_time))
+
+# Q3(a): actual departure date-time
+data <- data %>%
+  mutate(dep_datetime = time_hour + minutes(dep_delay))
+```
+
+# Problem 3(b)
+
+> Create an arrival date-time variable by considering the actual arrival time,
+> the date of departure, and whether a flight arrives on the same day or the
+> following day (overnight flights).
+> Hint: Convert `arr_time` into a character variable of length 4 using `sprintf`.
+> Then extract the hour and minutes using `substr` when creating your arrival
+> date-time variable.  Then create an indicator to determine which flights are
+> overnight (1) or not (0) and add this to your arrival date-time.
+
+## Solution
+
+### Step 1 — Parse `arr_time` into hours and minutes
+
+`arr_time` is stored as an integer (e.g., `836` means 08:36, `2358` means 23:58).
+We need to split it into separate hour and minute components.
+
+```{r}
+data <- data %>%
+  mutate(
+    arr_time_char = sprintf("%04d", arr_time),               # zero-pad to 4 digits
+    arr_datetime  = make_datetime(
+      year  = year,
+      month = month,
+      day   = day,
+      hour  = as.numeric(substr(arr_time_char, 1, 2)),       # first 2 chars = hour
+      min   = as.numeric(substr(arr_time_char, 3, 4)),       # last  2 chars = minute
+      tz    = "US/Pacific"                                   # LAX is US/Pacific
+    )
+  )
+```
+
+**Key steps explained:**
+
+| Code | Purpose |
+|---|---|
+| `sprintf("%04d", arr_time)` | Converts integer to a 4-character string, left-padding with zeros (e.g., `56` → `"0056"`) |
+| `substr(arr_time_char, 1, 2)` | Extracts characters 1–2 → the **hour** |
+| `substr(arr_time_char, 3, 4)` | Extracts characters 3–4 → the **minute** |
+| `make_datetime(..., tz = "US/Pacific")` | Assembles the date-time using the **departure date** (`year`, `month`, `day`) and the LAX time zone |
+
+At this point `arr_datetime` assumes every flight arrives on the **same calendar
+date** as its departure.  That is not always true.
+
+### Step 2 — Adjust for overnight flights
+
+A flight is overnight if it arrives (in Pacific time) before it departs (in
+Eastern time) when both are compared on a common clock.  We detect this by
+checking whether `arr_datetime < dep_datetime` and add one day where needed.
+
+```{r}
+data <- data %>%
+  mutate(overnight    = arr_datetime < dep_datetime) %>%     # TRUE/FALSE → coerces to 1/0
+  mutate(arr_datetime = arr_datetime + days(overnight))      # add 0 or 1 day
+```
+
+`days(overnight)` works because `TRUE` coerces to `1` and `FALSE` to `0`, so
+`days(1)` is added for overnight flights and `days(0)` (no change) for same-day
+arrivals.
+
+## Quick check
+
+```{r}
+data %>%
+  select(dep_datetime, arr_datetime, overnight, air_time) %>%
+  head(10)
+```
+
+Verify that `arr_datetime` is always later than `dep_datetime` after the
+adjustment:
+
+```{r}
+any(data$arr_datetime < data$dep_datetime)   # Should be FALSE
+```

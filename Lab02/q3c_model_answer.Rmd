@@ -1,0 +1,111 @@
+---
+title: "STATS 326/786 — Lab 02 Q3(c) Model Answer"
+author: "Week 2 Tutorial"
+date: \today
+output:
+  bookdown::html_document2:
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE, warning = FALSE)
+library(lubridate)
+library(tidyverse)
+library(nycflights13)
+```
+
+# Problem 3 — Setup
+
+Recreate the departure and arrival date-times from Q3(a) and Q3(b).
+
+```{r}
+data <- flights %>%
+  filter(origin == "JFK",
+         dest   == "LAX",
+         !is.na(arr_time))
+
+# Q3(a): actual departure date-time
+data <- data %>%
+  mutate(dep_datetime = time_hour + minutes(dep_delay))
+
+# Q3(b): actual arrival date-time (US/Pacific), adjusted for overnight flights
+data <- data %>%
+  mutate(
+    arr_time_char = sprintf("%04d", arr_time),
+    arr_datetime  = make_datetime(
+      year  = year,
+      month = month,
+      day   = day,
+      hour  = as.numeric(substr(arr_time_char, 1, 2)),
+      min   = as.numeric(substr(arr_time_char, 3, 4)),
+      tz    = "US/Pacific"
+    )
+  ) %>%
+  mutate(overnight    = arr_datetime < dep_datetime) %>%
+  mutate(arr_datetime = arr_datetime + days(overnight))
+```
+
+# Problem 3(c)
+
+> We are told that the average transit time is 6.5 hours.  Create a variable to
+> calculate the transit time, i.e., the difference between the arrival date-time
+> and departure date-time.  Plot the distribution and comment.  Then plot the
+> transit time against the air time and comment.
+
+## Solution
+
+### Calculate transit time
+
+```{r}
+data <- data %>%
+  mutate(transit_time = arr_datetime - dep_datetime)
+```
+
+`arr_datetime - dep_datetime` returns a `difftime` object in hours (since both
+are `POSIXct` with different time zones, lubridate handles the UTC conversion
+automatically).
+
+### Plot 1 — Distribution of transit time
+
+```{r, message = FALSE, warning = FALSE}
+ggplot(data = data,
+       mapping = aes(x = transit_time)) +
+  geom_histogram(fill = "blue", col = "white") +
+  geom_vline(xintercept = 6.5, linewidth = 1, linetype = "dashed") +
+  theme_bw() +
+  labs(x = "Transit time (hours)",
+       y = "Count")
+```
+
+**Comment:** The distribution of transit times is roughly unimodal and
+approximately symmetric, centred close to the claimed average of 6.5 hours
+(dashed line).  The bulk of flights have transit times between about 5.5 and
+7.5 hours.  There is a small number of outliers with unusually long transit
+times, likely due to large arrival delays.
+
+### Plot 2 — Transit time vs air time
+
+```{r, message = FALSE, warning = FALSE}
+ggplot(data = data,
+       mapping = aes(x = transit_time,
+                     y = air_time / 60)) +
+  geom_point(alpha = 0.1, col = "blue", size = 0.5) +
+  geom_abline(slope = 1, intercept = 0) +
+  theme_bw() +
+  labs(x = "Transit time (hours)",
+       y = "Air time (hours)")
+```
+
+**Comment:** Transit time is always **greater** than air time — all points lie
+below the 45° reference line (slope = 1, intercept = 0).  This is expected:
+`arr_time` in the dataset records when the aircraft arrives at the gate, not
+when it touches down, so transit time includes taxi time at both ends plus any
+time spent holding before landing.  The two variables are strongly positively
+correlated, with the gap between them representing the ground/taxi component of
+the journey.

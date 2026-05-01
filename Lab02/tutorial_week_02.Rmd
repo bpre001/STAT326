@@ -27,6 +27,11 @@ library(tidyverse)
 
 ```{r}
 
+birth <- make_date(year = 1879, month = 3, day = 14)
+death <- make_date(year = 1955, month = 4, day = 18)
+
+(death - birth)/dyears(1)                   
+                   
 ```
 
 
@@ -36,6 +41,24 @@ library(tidyverse)
 
 ```{r}
 
+dep_datetime <- make_datetime(year = 2022, 
+                              month = 11, 
+                              day = 18, 
+                              hour = 15, 
+                              min = 15, 
+                              tz = "Pacific/Auckland")
+
+arr_datetime <- make_datetime(year = 2022,
+                              month = 11,
+                              day = 19,
+                              hour = 12,
+                              min = 20,
+                              tz = "Europe/Paris")
+
+interval <- lubridate::interval(start = dep_datetime, end = arr_datetime)
+
+interval/dminutes(60)
+
 ```
 
 # Problem 3
@@ -44,6 +67,11 @@ library(tidyverse)
 
 ```{r}
 
+install.packages("nycflights13")
+library(nycflights13)
+
+head(flights)
+
 ```
 
 ## (a) 
@@ -51,6 +79,18 @@ library(tidyverse)
 > Create a departure date-time variable by considering the scheduled departure time and departure delay.  Note that `time_hour` is the date-time variable for the scheduled departure time.  
 
 ```{r}
+
+data <- flights %>%
+  filter(origin == "JFK",
+         dest   == "LAX",
+         !is.na(arr_time))
+
+
+data <- data %>% 
+  mutate(actual_dep_time = time_hour + minutes(dep_delay))
+
+glimpse(data)
+
 
 ```
 
