@@ -1,0 +1,116 @@
+---
+title: "STATS 326/786"
+author: "Week 09 Tutorial"
+date: \today
+fontsize: 11pt
+output:
+  bookdown::html_document2:
+    fig_height: 5
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(tidyverse)
+library(fpp3)
+```
+
+
+# Problem 1:
+
+Recall, a stationary time series is one that has a constant and finite mean and variance over time, and an autocovariance (and therefore autocorrelation) function that only depends on the lag.  Another way of saying this is that the mean, variance, and autocovariance are independent of time. We will also go through the modelling procedure for fitting non-seasonal ARIMA models.
+
+Consider the `aus_airpassengers` dataset in the `tsibbledata` package.  This contains the total annual air passengers (in millions) of air carriers in Australia from 1970 to 2016.  
+
+```{r}
+data = aus_airpassengers
+
+data %>%
+  autoplot(Passengers) +
+  theme_bw()
+```
+
+
+> Comment on why the time series is not stationary.
+
+
+> Difference the time series and plot it.  Comment on why the differenced series is not stationary.  Perform a KPSS test to show that it is not stationary.
+
+```{r}
+
+data %>%
+  autoplot(difference(Passengers)) +
+  theme_bw()
+
+data |> 
+  features(difference(Passengers), 
+           "unitroot_kpss")
+
+
+```
+
+> Difference the differenced time series and plot it. Perform a KPSS test on this to show the twice differenced series is stationary (in terms of the mean). 
+
+```{r}
+
+data %>%
+  autoplot(difference(difference(Passengers))) +
+  theme_bw()
+
+data |> 
+  features(difference(difference(Passengers)), 
+           "unitroot_kpss")
+
+```
+
+
+> Plot the ACF and PACF plots on the twice differenced time series.  Use these to guide you to choose two candidate ARIMA models.
+
+```{r}
+
+data |> 
+  gg_tsdisplay(difference(Passengers, differences = 2),
+               plot_type = "partial")
+
+
+```
+
+
+> Fit your two candidates as well as the automatic ARIMA models (stepwise and full search).  Output the parameter estimates of the model that has the best predictive ability.  Write the fitted model using backshift notation.
+
+Our ARIMA model can therefore be written as: 
+\begin{eqnarray*}
+(y_t - y_{t-1}) - (y_{t-1} - y_{t-2}) &=& \varepsilon_t + \theta_1\varepsilon_{t-1}\\
+(y_t - By_t) - (By_t - B^2y_t) &=& \varepsilon_t + \theta_1B\varepsilon_t\\
+(1 - 2B + B^2) y_t &=& (1 + \theta_1B)\varepsilon_t \\
+(1 - B)^2 y_t &=& (1 - 0.90 B)\varepsilon_t
+\end{eqnarray*}
+
+
+```{r}
+
+fit <- data |> 
+  model(m1 = ARIMA(Passengers ~ pdq(4,2,0)),
+        m2 = ARIMA(Passengers ~ pdq(0,2,1)),
+        m3 = ARIMA(Passengers),
+        m4 = ARIMA(Passengers, stepwise = FALSE)
+        )
+
+fit |> glance() |> select(.model, AIC, AICc, BIC)
+
+fit |> select(m4) |> report()
+
+```
+
+
+# Problem 2: 
+
+Find another non-seasonal time series in the `tsibbledata` package.  Repeat the relevant steps from Problem 1 to fit non-seasonal ARIMA models.
+
+If you get stuck, some cool data sets to work with are: Hare pelts (from `pelt`) and French imports (from `global_economy`).

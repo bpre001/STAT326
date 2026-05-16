@@ -1,0 +1,231 @@
+---
+title: "STATS 326/786"
+author: "Week 8 Tutorial"
+date: \today
+fontsize: 11pt
+output:
+  bookdown::html_document2:
+    fig_height: 5
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(tidyverse)
+library(fpp3)
+library(grid)
+library(gridExtra)
+```
+
+
+# Problem 1
+
+Consider the annual French exports time series from the `global_economy` data set below.
+
+```{r}
+data = global_economy %>%
+  filter(Country == "France") %>%
+  select(Exports)
+
+data %>%
+  autoplot(Exports) + 
+  theme_bw()
+```
+
+> Based on the time plot above, think of two candidate ETS models to fit; one with an additive error term and one with a multiplicative error term.  Write down why you think these models will be appropriate for the time series given.
+
+Solution:
+
+The time series is trending and has no seasonal component, therefore an ETS model with additive linear trend or damped trend makes sense.  I would be interested in testing any of the four following models: ETS(A,A,N), ETS(A,Ad,N), ETS(M,A,N), ETS(M,Ad,N).  My candidates are ETS(A,A,N) and ETS(M,A,N).
+
+
+> Fit these two models and then perform a 1-step stretch cross-validation with `.init = 20` and `.step = 1`. Report the RMSE, MAE, MAPE, MASE and comment on which model has the best forecast accuracy.
+
+```{r}
+
+fit = data %>%
+  model(Holt.A = ETS(Exports ~ error("A") + trend("A") + season("N")),
+        Holt.M = ETS(Exports ~ error("M") + trend("A") + season("N")))
+
+data.cv = data %>%
+  stretch_tsibble(.init = 20)
+
+fit.cv = data.cv %>%
+  model(Holt.A = ETS(Exports ~ error("A") + trend("A") + season("N")),
+        Holt.M = ETS(Exports ~ error("M") + trend("A") + season("N"))) %>%
+  forecast(h = 1)
+
+fit.cv %>%
+  accuracy(data) %>%
+  select(.model, RMSE, MAE, MAPE, MASE)
+
+```
+
+After using 1-step cross-validation, the model that has the smallest forecast error using all metrics is the additive Holt model.  
+
+
+> For both models, forecast $h = 20$ periods in the future.  Plot the forecasts and comment on the width of the prediction intervals.  
+
+```{r}
+fit %>%
+  forecast(h = 20) %>%
+  autoplot(data) +
+  theme_bw()
+```
+
+We know that the MAN model uses multiplicative (relative) errors, so the prediction intervals will be different to the AAN model.  The prediction distribution for models with additive errors are Gaussian and the prediction distribution for models with multiplicative errors is non-Gaussian.  Prediction intervals are based on quantiles of simulated future paths.  
+
+
+# Problem 2
+
+Consider the following time series of turnover from supermarket and grocery stores in New South Wales in `aus_retail`.  
+
+```{r}
+
+data = aus_retail %>%
+  filter(State == "Victoria",
+         Industry == "Supermarket and grocery stores") %>%
+  select(Month, Turnover)
+
+data %>%
+  autoplot(Turnover) + 
+  theme_bw()
+
+```
+
+> Based on the time plot above, think of two candidate ETS models to fit.  Write down why you think these models will be appropriate for the time series given.
+
+Solution:
+
+There is multiplicative seasonality, where the seasonal magnitudes increase with the level of the series, suggesting an "M" seasonal component.  There is an increasing trend, so this would suggest either an "A" or "Ad" trend.  If we have multiplicative seasonality, we cannot have an additive error term due to numerical instabilities, so we must choose "M" for the error component. Therefore, ETS(M, A, M) and ETS(M, Ad, M) are good candidate models for our data.  
+
+
+> Fit these two candidate models as well as the automatic ETS model.  Compare the models using AICc and output the parameter estimates from the model that has the best predictive ability.
+
+```{r}
+
+fit = data %>%
+  model(My.ETS1 = ETS(Turnover ~ error("M") + trend("A") + season("M")),
+        My.ETS2 = ETS(Turnover ~ error("M") + trend("Ad") + season("M")),
+        Auto.ETS = ETS(Turnover))
+
+# Model comparison
+fit %>%
+  glance()
+
+# Best model
+fit %>%
+  select(My.ETS1) %>%
+  report()
+
+```
+
+The best model is the ETS(M, A, M) model.  This is one of the candidate models we found as well as the one that `R` automatically found to be the best.  This ETS model has the lowest AICc.
+
+
+# Problem 3
+
+> Complete the code in the `R` function below to simulate data from an additive Holt linear trend model (ETS(A,A,N)).  You will need to use the measurement and state equations from Page 45 in the Chapter 6 notes.   
+
+```{r}
+
+Holt = function(n, alpha, beta, l0, b0, sigma) {
+  
+  # Noise
+  eps = rnorm(n, sd = sigma)
+  
+  # Initialise
+  y = l = b = rep(NA, n)
+  y[1] = l0 + b0 + eps[1]
+  l[1] = l0 + b0 + alpha * eps[1]
+  b[1] = b0 + beta * eps[1]
+  
+  # Generate path
+  for (t in 2:n) {
+    y[t] = l[t-1] + b[t-1] + eps[t]
+    l[t] = l[t-1] + b[t-1] + alpha * eps[t]
+    b[t] = b[t-1] + beta * eps[t]
+  }
+  
+  return(y)
+  
+}
+
+# Test to see if it works 
+d = tsibble(y = Holt(1000, 0.99, 0.0001, 100, 0.01, 1),
+            t = 1:1000,
+            index = t)
+d %>% 
+  autoplot(y) + 
+  theme_bw()
+
+```
+
+> Consider the data set from Problem 1.  Fit the additive Holt model and extract the parameter estimates.  Use these estimates in the function you just created to generate four different trajectories.  Compare these to the observed data.  Do they look similar?
+
+```{r}
+
+data = global_economy %>%
+  filter(Country == "France") %>%
+  select(Exports)
+
+fit = data %>%
+  model(Holt.A = ETS(Exports ~ error("A") + trend("A") + season("N")))
+
+fit %>%
+  report()
+
+# Plot four trajectories
+set.seed(2024)
+
+p1 = tsibble(y = Holt(58, 
+                     0.9475167 , 
+                     0.0001000041 , 
+                     13.37335, 
+                     0.3120665, 
+                     sqrt(1.3472)),
+            t = 1960:2017,
+            index = t) %>%
+  autoplot(y) + theme_bw()
+
+p2 = tsibble(y = Holt(58, 
+                     0.9475167 , 
+                     0.0001000041 , 
+                     13.37335, 
+                     0.3120665, 
+                     sqrt(1.3472)),
+            t = 1960:2017,
+            index = t) %>%
+  autoplot(y) + theme_bw()
+
+p3 = tsibble(y = Holt(58, 
+                     0.9475167 , 
+                     0.0001000041 , 
+                     13.37335, 
+                     0.3120665, 
+                     sqrt(1.3472)),
+            t = 1960:2017,
+            index = t) %>%
+  autoplot(y) + theme_bw()
+
+p4 = tsibble(y = Holt(58, 
+                     0.9475167 , 
+                     0.0001000041 , 
+                     13.37335, 
+                     0.3120665, 
+                     sqrt(1.3472)),
+            t = 1960:2017,
+            index = t) %>%
+  autoplot(y) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+
+```
+
+Looks pretty similar!  This shows the model is reasonable for the data.  

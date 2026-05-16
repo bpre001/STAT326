@@ -43,17 +43,55 @@ pigs %>%
 
 ```{r}
 
+fit <- pigs |> 
+  model(a0 = ETS(Count ~ error("A") + trend("N", alpha = 0.001) + season("N")),
+        a1 = ETS(Count ~ error("A") + trend("N", alpha = 0.999) + season("N")),
+        a_opt = ETS(Count ~ error("A") + trend("N") + season("N"))
+          )
+
+
 ```
 
 > For the model where $\alpha$ was automatically optimised, extract and interpret the estimates of $l_0$ and $\alpha$.  
 
 ```{r}
 
+fit |> 
+  select(a_opt) |> 
+  report()
+
 ```
 
 > On three seperate plots overlay the fitted values on the original time series.  Comment on what you observe.  
 
 ```{r}
+
+# Extract fitted values
+fit_augment <- augment(fit) |> select(.fitted)
+
+# alpha = 0.001
+p1 <- pigs |> 
+  autoplot(Count) +
+  autolayer(fit_augment |> filter(.model == "a0"),
+            .fitted, colour = "red") +
+  theme_bw()
+
+# alpha = 0.999
+p2 <- pigs |> 
+  autoplot(Count) +
+  autolayer(fit_augment |> filter(.model == "a1"),
+            .fitted, colour = "red") +
+  theme_bw()
+
+# alpha = optimum (alpha = 0.322)
+p3 <- pigs |> 
+  autoplot(Count) +
+  autolayer(fit_augment |> filter(.model == "a_opt"),
+            .fitted, colour = "red") +
+  theme_bw()
+
+# Plot
+grid.arrange(p1, p2, p3, nrow = 3)
 
 ```
 
@@ -86,11 +124,26 @@ weight.plot = function(alpha, N = 20) {
 
 }
 
+p1 = weight.plot(0.001)
+p2 = weight.plot(0.999)
+p3 = weight.plot(0.322)
+
+grid.arrange(p1, p2, p3, nrow = 3)
+
 ```
 
 > For all three models, forecast 4 years into the future ($h = 48$) and plot these forecasts with their default prediction intervals. Comment on what you observe.
 
 ```{r}
+
+fc <- fit |> 
+  forecast(h = 48)
+
+fc |> 
+  filter(.model != "a_opt") |> 
+  autoplot(pigs) +
+  theme_bw()
+
 
 ```
 

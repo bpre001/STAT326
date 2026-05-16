@@ -1,0 +1,235 @@
+---
+title: "STATS 326/786"
+author: "Week 09 Tutorial"
+date: \today
+fontsize: 11pt
+output:
+  bookdown::html_document2:
+    fig_height: 5
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(tidyverse)
+library(fpp3)
+```
+
+
+# Problem 1:
+
+Recall, a stationary time series is one that has a constant and finite mean and variance over time, and an autocovariance (and therefore autocorrelation) function that only depends on the lag.  Another way of saying this is that the mean, variance, and autocovariance are independent of time. We will also go through the modelling procedure for fitting non-seasonal ARIMA models.
+
+Consider the `aus_airpassengers` dataset in the `tsibbledata` package.  This contains the total annual air passengers (in millions) of air carriers in Australia from 1970 to 2016.  
+
+```{r}
+data = aus_airpassengers
+
+data %>%
+  autoplot(Passengers) +
+  theme_bw()
+```
+
+
+> Comment on why the time series is not stationary.
+
+Solution:  
+
+It has a trend and therefore the mean is not constant over time.
+
+> Difference the time series and plot it.  Comment on why the differenced series is not stationary.  Perform a KPSS test to show that it is not stationary.
+
+Solution: 
+
+```{r, warning = FALSE}
+data %>%
+  autoplot(difference(Passengers)) + 
+  theme_bw()
+
+data %>%
+  features(difference(Passengers), "unitroot_kpss")
+```
+
+There is a trend in the differenced series, meaning the mean is not constant with time.  We have strong evidence against null hypothesis that the time series is stationary ($p$-value = 0.02). 
+
+> Difference the differenced time series and plot it. Perform a KPSS test on this to show the twice differenced series is stationary (in terms of the mean). 
+
+Solution:
+
+```{r, warning = FALSE}
+data %>%
+  autoplot(difference(Passengers, differences = 2)) + 
+  theme_bw()
+
+data %>%
+  features(difference(Passengers, differences = 2), "unitroot_kpss")
+```
+
+We have no evidence against the null hypothesis that the twice differenced series is stationary ($p$-value = 0.1) in terms of the mean. The variance looks "okay" too because the large peaks are only transient, and not persistent.  (If you weren't happy with the constant variance assumption, you may want to Box-Cox transform the data before determining the number of differences).
+
+
+> Plot the ACF and PACF plots on the twice differenced time series.  Use these to guide you to choose two candidate ARIMA models.
+
+```{r}
+data %>%
+  ACF(difference(Passengers, differences = 2)) %>%
+  autoplot() + theme_bw()
+
+data %>%
+  PACF(difference(Passengers, differences = 2)) %>%
+  autoplot() + theme_bw()
+```
+
+The pattern we would see in the PACF for a non-seasonal AR($p$) is a significant spike at lag $p$ and none after that.  The pattern we would see in the ACF of a non-seasonal AR($p$) is exponential decay or sinusoidal dampening. We see significant spikes at lags 1, 2, and 4 in the PACF and a damped sinusoidal pattern in the ACF.  This would lead us to consider $p = 4$ AR terms.  Therefore one candidate is the ARIMA(4, 2, 0). 
+
+The pattern we would see in the ACF for a non-seasonal MA($q$) is a significant spike at lag $q$ and none after that.  The pattern we would see in the PACF of a non-seasonal MA($q$) is exponential decay or sinusoidal dampening. We see a significant spike at lag 1 and none after that in the ACF plot and a decaying PACF.  This would lead us to consider $q = 1$ MA terms.  Therefore the second candidate is the ARIMA(0, 2, 1). 
+
+
+> Fit your two candidates as well as the automatic ARIMA models (stepwise and full search).  Output the parameter estimates of the model that has the best predictive ability.  Write the fitted model using backshift notation.
+
+```{r}
+fit = data %>%
+  model(m1 = ARIMA(Passengers ~ pdq(4,2,0)),
+        m2 = ARIMA(Passengers ~ pdq(0,2,1)),
+        m3 = ARIMA(Passengers),
+        m4 = ARIMA(Passengers, stepwise = FALSE))
+fit %>% glance() %>% select(.model, AIC, AICc, BIC)
+fit %>% select(m4) %>% report()
+```
+The best model is the ARIMA(0,2,1).  Recall, the backshift operator allows us to write our ARIMA models in a concise notation.  We know that $By_t = y_{t-1}$.  
+
+Our ARIMA model can therefore be written as: 
+\begin{eqnarray*}
+(y_t - y_{t-1}) - (y_{t-1} - y_{t-2}) &=& \varepsilon_t + \theta_1\varepsilon_{t-1}\\
+(y_t - By_t) - (By_t - B^2y_t) &=& \varepsilon_t + \theta_1B\varepsilon_t\\
+(1 - 2B + B^2) y_t &=& (1 + \theta_1B)\varepsilon_t \\
+(1 - B)^2 y_t &=& (1 - 0.90 B)\varepsilon_t
+\end{eqnarray*}
+
+
+# Problem 2: 
+
+Find another non-seasonal time series in the `tsibbledata` package.  Repeat the relevant steps from Problem 1 to fit non-seasonal ARIMA models.
+
+If you get stuck, some cool data sets to work with are: Hare pelts (from `pelt`) and French imports (from `global_economy`).
+
+Solution:
+
+> Hare pelts.
+
+```{r}
+pelt %>% 
+  autoplot(Hare) + 
+  theme_minimal()
+
+# KPSS test for stationarity
+pelt %>% 
+  features(Hare, unitroot_kpss)  # Passes test
+
+# Sanity check
+pelt %>% 
+  features(Hare, unitroot_ndiffs)  
+# Suggests no need to difference
+```
+
+There KPSS test gives us no evidence against the null hypothesis of the time series being stationary and non-seasonal.  
+
+```{r}
+# ACF plot
+pelt %>% 
+  ACF(Hare) %>% 
+  autoplot() + 
+  theme_minimal()
+
+# PACF plot
+pelt %>% 
+  PACF(Hare) %>% 
+  autoplot() +
+  theme_minimal()
+```
+
+The hare pelt time series is weakly stationary.  This means the order of differencing in an ARIMA model is $d = 0$.  The ACF has a damped sinusoidal shape. The PACF has a significant spike at lag 2 (and perhaps at lag 4, though it looks marginal) and cuts off after this.  This would indicate that a reasonable candidate model for the hare pelt series is either an AR(2) (i.e., ARIMA(2, 0, 0)), or an AR(4) (i.e., ARIMA(4, 0, 0)).  It is quite difficult to determine what an appropriate MA model would be, but we can try MA(1) (i.e., ARIMA(0, 0, 1)) and MA(2) (i.e., ARIMA(0, 0, 2)) as the first two autocorrelation coefficients in the ACF are significant.  Higher orders could lead to over-fitting.  
+
+```{r}
+# Fit models
+fit <- pelt %>%
+  model(m1 = ARIMA(Hare ~ pdq(2, 0, 0)),
+        m2 = ARIMA(Hare ~ pdq(4, 0, 0)),
+        m3 = ARIMA(Hare ~ pdq(0, 0, 1)),
+        m4 = ARIMA(Hare ~ pdq(0, 0, 2)),
+        stepwise = ARIMA(Hare),
+        search = ARIMA(Hare, stepwise = FALSE))
+
+# Which one is the best?
+glance(fit) %>% 
+  arrange(AICc) %>%
+  select(.model:BIC)
+
+# Look at best model
+fit %>%
+  select(stepwise) %>%
+  report()  # ARMA(2, 1) with constant
+```
+
+We find that the best model according to AICc is an ARMA(2, 1) with a mean.  Both the stepwise and search algorithms choose this model.  This can be written as:
+\begin{eqnarray*}
+y_t - \phi_1 y_{t-1} - \phi_2 y_{t-2} &=& c + \varepsilon_t + \theta_1\varepsilon_{t-1} \\
+(1 - \phi_1 B - \phi_2 B^2)y_t &=& c + (1 + \theta_1 B)\varepsilon_t \\
+(1 - 1.38B + 0.71B^2)y_t &=& 15000 + (1 - 0.57B)\varepsilon_t
+\end{eqnarray*}
+
+
+> French imports time series.
+
+```{r, warning = FALSE}
+# Read in data
+data <- global_economy %>% 
+  filter(Country == "France") %>%
+  select(Imports)
+
+# Look at data
+data %>% 
+  autoplot(Imports) + 
+  theme_minimal()
+
+# Look at differenced series, as well as ACF + PACF on same plot
+data %>% 
+  gg_tsdisplay(difference(Imports), 
+               plot_type = "partial") 
+
+# KPSS test
+data %>%
+  features(difference(Imports), "unitroot_kpss")
+
+# Fit candidate and automatic models
+fit <- data %>%
+  model(m1 = ARIMA(Imports ~ pdq(0, 1, 0)), 
+        stepwise = ARIMA(Imports),
+        search = ARIMA(Imports, stepwise = FALSE))
+
+# Which one is the best?
+glance(fit) %>% 
+  arrange(AICc) %>%
+  select(.model:BIC)
+
+# Look at best model
+fit %>%
+  select(stepwise) %>%
+  report()  # ARIMA(0, 1, 1) 
+```
+
+We see that French imports has a trend and once we take a first-order difference, we end up with a weakly stationary time series.  So the order of differencing for an ARIMA model should be $d = 1$. The next step is to assess the ACF and PACF to determine appropriate candidate AR or MA orders.  There are a couple of "significant" lags in the plots (at lag 9 in the ACF and lag 14 in the PACF), but the time series is very short (and therefore the higher lags are estimated with very little data) so we would not usually fit ARIMA models with large $p$ or $q$ (this would cause an over-fit).  Also, these significant lags could be due to chance (i.e., we would expect 5\% of the estimated autocorrelations to be outside the 95\% significance threshold for white noise).  None of the smaller lags are significant, and there are no other strong patterns in the ACF and PACF plots, so our candidate model is ARIMA(0, 1, 0) (i.e., the random walk model).  The automatic algorithms choose and ARIMA(0, 1, 1) model with drift using AICc.  
+
+\begin{eqnarray*}
+y_t - y_{t-1} &=& c + \varepsilon_t + \theta_1 \varepsilon_{t-1} \\
+(1 - B)y_t &=& c + (1 + \theta_1 B) \varepsilon_t \\
+(1 - B)y_t &=& 0.34 + (1 - 0.32 B) \varepsilon_t
+\end{eqnarray*}
+
+Something interesting to observe is how similar the fitted values are to a certain ETS model we have covered in class; the ETS(A,N,N) model.  Have a think about the link between ARIMA(0,1,1) and ETS(A,N,N).

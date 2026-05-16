@@ -1,0 +1,121 @@
+---
+title: "STATS 326/786"
+author: "Week 8 Tutorial"
+date: \today
+fontsize: 11pt
+output:
+  bookdown::html_document2:
+    fig_height: 5
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(tidyverse)
+library(fpp3)
+library(grid)
+library(gridExtra)
+```
+
+
+# Problem 1
+
+Consider the annual French exports time series from the `global_economy` data set below.
+
+```{r}
+data = global_economy %>%
+  filter(Country == "France") %>%
+  select(Exports)
+
+data %>%
+  autoplot(Exports) + 
+  theme_bw()
+```
+
+> Based on the time plot above, think of two candidate ETS models to fit; one with an additive error term and one with a multiplicative error term.  Write down why you think these models will be appropriate for the time series given.
+
+> Fit these two models and then perform a 1-step stretch cross-validation with `.init = 20` and `.step = 1`. Report the RMSE, MAE, MAPE, MASE and comment on which model has the best forecast accuracy.
+
+```{r}
+
+```
+
+
+> For both models, forecast $h = 20$ periods in the future.  Plot the forecasts and comment on the width of the prediction intervals.  
+
+```{r}
+
+```
+
+
+# Problem 2
+
+Consider the following time series of turnover from supermarket and grocery stores in New South Wales in `aus_retail`.  
+
+```{r}
+
+data = aus_retail %>%
+  filter(State == "Victoria",
+         Industry == "Supermarket and grocery stores") %>%
+  select(Month, Turnover)
+
+data %>%
+  autoplot(Turnover) + 
+  theme_bw()
+
+```
+
+> Based on the time plot above, think of two candidate ETS models to fit.  Write down why you think these models will be appropriate for the time series given.
+
+
+> Fit these two candidate models as well as the automatic ETS model.  Compare the models using AICc and output the parameter estimates from the model that has the best predictive ability.
+
+```{r}
+
+```
+
+
+# Problem 3
+
+> Complete the code in the `R` function below to simulate data from an additive Holt linear trend model (ETS(A,A,N)).  You will need to use the measurement and state equations from Page 45 in the Chapter 6 notes.  
+
+```{r, eval = FALSE}
+Holt = function(n, alpha, beta, l0, b0, sigma) {
+  
+  # Noise
+  eps = rnorm(n, sd = sigma)
+  
+  # Initialise
+  y = l = b = rep(NA, n)
+  y[1] = l0 + b0 + eps[1]
+  l[1] = l0 + b0 + alpha * eps[1]
+  b[1] = b0 + beta * eps[1]
+  
+  # Generate path
+  for (t in 2:n) {
+    y[t] = 
+    l[t] =
+    b[t] = 
+  }
+  
+  return(y)
+  
+}
+
+```
+
+> Consider the data set from Problem 1.  Fit the additive Holt model and extract the parameter estimates.  Use these estimates in the function you just created to generate four different trajectories.  Compare these to the observed data.  Do they look similar?
+
+```{r}
+
+data = global_economy %>%
+  filter(Country == "France") %>%
+  select(Exports)
+
+```
